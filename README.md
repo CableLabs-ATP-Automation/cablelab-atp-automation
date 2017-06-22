@@ -8,7 +8,7 @@ CableLabs R-PHY Automated Test Procedure Codebase
 
 1. **Fedora OS**
 2. **Python 2.x** and **Python 3.x**
-3. **Installing pip**  
+3. **Installing pip with sudo**  
     yum clean all  
     yum -y update  
     yum -y install python-pip   OR  
@@ -28,27 +28,27 @@ CableLabs R-PHY Automated Test Procedure Codebase
     sudo pip install -U pytest
 7. **pytest-html**  
     link: https://pypi.python.org/pypi/pytest-html
-    pip install pyhtml
+    sudo pip install pytest-html
 8. **wireshark**  
     links:  
     
-    https://www.dropbox.com/s/ir36riu2n4nst9e/README_wireshark-03222017_install_binaries.txt?dl=0  
-     
-    https://www.dropbox.com/s/vns1ofdwsai6db3/wireshark-03312017.src.rpm?dl=0  
-     
-    https://www.dropbox.com/s/iy06l3jpxxy87dm/wireshark-03312017.tar.bz2?dl=0  
-     
-    https://www.dropbox.com/s/vtf2rqizadorme5/wireshark-03312017.x86_64.rpm?dl=0  
-     
-    https://www.dropbox.com/s/d63cdq7yzuxsqgw/wireshark-qt-03312017.x86_64.rpm?dl=0  
-    >yum install glib*  
-    >yum install qt5-qtmultimedia  
-    >yum install x11vnc (not sure if this is required)  
-    >rpm -ivh wireshark-2.3.0-1.x86_64.rpm  
+    https://www.dropbox.com/s/kfzm9ibibr9y182/wireshark-2.3.0-1.src.rpm?dl=0
+    
+    https://www.dropbox.com/s/i8z8s6iy3l8op7y/wireshark-2.3.0-1.tar.bz2?dl=0
+    
+    https://www.dropbox.com/s/8dzh51qxjxv5b2k/wireshark-2.3.0-1.x86_64.rpm?dl=0
+    
+    https://www.dropbox.com/s/q82dwornp4rsv7k/wireshark-qt-2.3.0-1.x86_64.rpm?dl=0
+    
+    https://www.dropbox.com/s/ir36riu2n4nst9e/README_wireshark-03222017_install_binaries.txt?dl=0
+    >sudo yum install glib*  
+    >sudo yum install qt5-qtmultimedia  
+    >sudo yum install x11vnc (not sure if this is required)  
+    >sudo rpm -ivh wireshark-2.3.0-1.x86_64.rpm  
     Preparing...                          ################################# [100%]  
     Updating / installing...  
     1:wireshark-2.3.0-1                ################################# [100%]  
-    >rpm -ivh wireshark-qt-2.3.0-1.x86_64.rpm  
+    >sudo rpm -ivh wireshark-qt-2.3.0-1.x86_64.rpm  
     Preparing...                          ################################# [100%] 
     Updating / installing...  
     1:wireshark-qt-2.3.0-1             ################################# [100%]  
@@ -57,7 +57,17 @@ CableLabs R-PHY Automated Test Procedure Codebase
     ```
     mkdir YOUR_TEST_PATH
     cd YOUR_TEST_PATH
-    Add detail of github......, Also add common git commands
+    git clone https://github.com/CableLabs-ATP-Automation/cablelab-atp-automation.git
+    cd cablelab-atp-automation
+    git checkout -b <your branch name> master
+    git status
+    git branch
+    
+    To merge to your local branch:
+    git add file 1, file 2, file 3, etc,
+    git commit -m "Comments"
+    git push origin <your branch name>
+    Finally put in a merge request through github
     ```
 10. **Apache server establish(optional)**:  
     http://httpd.apache.org/docs/2.4/install.html
