@@ -1,0 +1,101 @@
+basic_config:
+    pcap_file: rpd_boot.pcap
+    ccap_core_ip: 10.10.17.1
+    rpd_ip: 10.10.17.36
+    rpd_mac_addr: 00:04:9f:32:17:99
+    ccap_mac_addr: 00:fe:c8:05:dc:b8
+
+captureTLV:
+    "62.1":
+      length: 1
+      value: 2
+    "62.2":
+      length: 6
+      value: 00:fe:c8:05:dc:b8
+    "50.18": 
+      length: 1
+      value: 4
+    "50.17":
+      length: 1
+      value: 4 
+    "97.1":
+      length: 1
+      value: 3
+    "50.37":
+      length: 1
+      value: 3
+    "62.6":
+      length: 1
+      value: 3
+    "61.2":
+      length: 1
+      value: 2
+    "50.19.1":
+      length: 1
+      value: 3
+    "50.19.2":
+      length: 1
+      value: 3
+    "50.19.4":
+      length: 1
+      value: 3
+    "50.22.1":
+      length: 1
+      value: 3
+    "50.22.3":
+      length: 1
+      value: 4 
+    "50.22.2":
+      length: 1
+      value: 4
+    "63.1":
+      length: 1
+      value: 2 
+    "63.12":
+      length: 1
+      value: 4 
+    "63.8":
+      length: 1
+      value: 4
+    "63.2":
+      length: 6
+      value: 00:fe:c8:05:dc:b8        
+        
+procedure:
+    13:
+        name: "#13_DOCSIS_TIME_SYNC_MAC_MSG_FROM_CCAP_CORE"
+        data_file: "#13_DOCSIS_TIME_SYNC_MAC_MSG_FROM_CCAP_CORE.yaml"
+        
+    17:
+        name: "#17_TLV_Based_Verification.yaml"
+        data_file: "#17_TLV_Based_Verification.yaml"
+
+    19:
+        name: "#19_Ethernet_802.3_802.1Q_IPv4_Headers"
+        data_file: "#19_Ethernet_802.3_802.1Q_IPv4_Headers.yaml"       
+
+    21:
+        name: "#21_L2TPv3_Control_messages"
+        data_file: "#21_L2TPv3_Control_messages.yaml"
+
+    22:
+        name: "#22_L2TPv3_unicast_DEPI"
+        data_file: "#22_L2TPv3_unicast_DEPI.yaml"
+
+    23:
+        name: "#23_L2TPv3_DSCP_Policy"
+        data_file: "#23_L2TPv3_DSCP_Policy.yaml"
+
+    25:
+        name: "#25_L2TPv3_mandatory_AVPs"
+        data_file: "#25_L2TPv3_mandatory_AVPs.yaml"    
+
+    26:
+        name: "#26_DEPI_Data_Forwarding_Plane_DEPI_MPT"
+        data_file: "#26_DEPI_Data_Forwarding_Plane_DEPI_MPT.yaml"
+
+    27:
+        name: "#27_DEPI_DATA_Forwording_Plane_DEPI_PSP_Sublayer"
+        data_file: "#27_DEPI_DATA_Forwording_Plane_DEPI_PSP_Sublayer.yaml"
+
+

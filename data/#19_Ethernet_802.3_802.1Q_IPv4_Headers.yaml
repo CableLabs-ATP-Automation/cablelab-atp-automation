@@ -1,0 +1,49 @@
+source:
+    procedure_name: "#19_Ethernet_802.3_802.1Q_IPv4_Headers"
+    ip_proto: "0x73"
+    ip_ttl: "0xff"
+    l2tp_session_id: "0"
+    l2tp_ccid: "0" 
+    
+filter:
+    DHCP_ACK:
+        instance: 
+            - pcap_DHCP_ACK: $procedure_name$_pcap_DHCP_ACK.pcap
+            - xml_DHCP_ACK: $procedure_name$_xml_DHCP_ACK.xml
+        input: $pcap_file$
+        match: 'bootp.hw.mac_addr == $rpd_mac_addr$ and (udp.port == 67 or udp.port == 68) and bootp.option.dhcp == 5'
+        assign:
+            dhcp_ack_time: get_show("//field[@name='frame.time_epoch']")
+
+    PSP:
+        instance: 
+            - pcap_PSP: $procedure_name$_psp.pcap
+            - xml_PSP: $procedure_name$_psp.xml
+        input: $pcap_file$
+        match: 'frame.time_epoch >= $dhcp_ack_time$ and psp and frame.number <= 5'
+
+    CCAP_to_RPD_PSP:
+        instance:
+            - pcap_CCAP_to_RPD_PSP: $procedure_name$_pcap_CCAP_to_RPD_PSP.pcap
+            - xml_CCAP_to_RPD_PSP: $procedure_name$_xml_CCAP_to_PSP.xml
+        input: $pcap_PSP$
+        match: 'ip.src == $ccap_core_ip$ and ip.dst == $rpd_ip$'
+
+testcase:
+    tlv_check:
+      input: check_TLV
+      checkpoint:
+            "{19.10.1}{Verify AdminState of the SC-QAM channel}{check_tlv}{62.1}": ["length==1", "value==2"]
+            "{19.10.2}{Verify CcapCoreOwner}{check_tlv}{62.2}": ["length==6", "'value'=='$ccap_mac_addr$'"]
+
+    Frame_tagged_with_802.1Q:
+        input: $xml_PSP$
+        checkpoint:
+            "{#19.17}{Verify the vlan.etype to confirm that the Ethernet frame is 802.1Q tagged with VLAN ID, priority etc}{exist}{//field[@name='vlan.etype']}": [0x8100]
+
+    CCAP_to_RPD_PSP:
+        input: $xml_CCAP_to_RPD_PSP$
+        checkpoint:
+            "{#19.18.1}{Verify number of packets with IPV4 header is more than 0}{exist}{//field[@name='ip.version']}": [4] 
+            "{#19.18.2}{Verify Do Not Fragment Flag using ip.flags}{exist}{//field[@name='ip.flags']}": [0x02]
+            "{#19.18.3}{Verify the ip.dsfield in the IP header}{not_exist}{//field[@name='ip.dsfield']}": []   

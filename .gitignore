@@ -1,0 +1,12 @@
+.DS_Store
+.pyc
+.txt
+._*
+.xml
+.pcap
+.log
+.html
+__pycache__/
+log/
+.cache/
+log/

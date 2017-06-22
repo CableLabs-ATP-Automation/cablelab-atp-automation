@@ -1,0 +1,27 @@
+source:
+    procedure_name: "#17_TLV_Based_Verification.yaml"
+    ip_proto: "0x73"
+    ip_ttl: "0xff"
+    l2tp_session_id: "0"
+    l2tp_ccid: "0"
+
+filter: 
+
+        
+testcase:
+    
+    tlv_check:
+        input: check_TLV
+        checkpoint:
+            "{#17.3.1}{Verify NumUsPspFlows}{check_tlv}{50.18}": ["length==1","value>=4"]
+            "{#17.3.2}{Verify NumDsPspFlows}{check_tlv}{50.17}": ["length==1","value>=4"]
+            "{#17.3.3}{Verify NumDsPspFlows}{check_tlv}{97.1}": ["length==1","value==2 or value==3"] 
+            "{#17.5}{Record DsSchedulerPhbIdList,TLV }{store_tlv_value}{50.37}": "$DsSchedulerPhbIdList$"
+            "{#17.8.1}{Verify AdminState of the QAM channel }{check_tlv}{62.1}": ["length==1","value==2"]
+            "{#17.8.2}{Verify OperationalMode}{check_tlv}{62.6}": ["length==1","value==3"] 
+            "{#17.9.1}{Verify VendorName}{check_tlv}{50.19.1}": ["length==1","value==3"]
+            "{#17.9.2}{Verify VendorId}{check_tlv}{50.19.2}": ["length==1","value==3"] 
+            "{#17.9.3}{Verify DeviceMacAddress}{check_tlv}{50.19.4}": ["length==1","value==3"] 
+            "{#17.9.4}{From Allocated Downstream Channel Resources, Identify the downstream RF port Index}{check_tlv}{50.22.1}": ["length==1","value==3"] 
+            "{#17.9.5}{From Downstream RF Port Configuration, verify that the Admin State is}{check_tlv}{61.2}": ["length==1","value==2"] 
+    

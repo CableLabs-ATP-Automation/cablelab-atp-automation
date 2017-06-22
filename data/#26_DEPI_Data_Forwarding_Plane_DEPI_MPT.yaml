@@ -1,0 +1,103 @@
+source:
+    procedure_name: "#26_DEPI_Data_Forwarding_Plane_DEPI_MPT"
+    ip_proto: "0x73"
+    ip_ttl: "0xff"
+    l2tp_session_id: "0"
+    l2tp_ccid: "0"
+
+filter:
+    DHCP_ACK:
+        instance: 
+            - pcap_DHCP_ACK: $procedure_name$_pcap_DHCP_ACK.pcap
+            - xml_DHCP_ACK: $procedure_name$_xml_DHCP_ACK.xml
+        input: $pcap_file$
+        match: 'bootp.hw.mac_addr == $rpd_mac_addr$ and (udp.port == 67 or udp.port == 68) and bootp.option.dhcp == 5'
+        assign:
+            dhcp_ack_time: get_show("//field[@name='frame.time_epoch']")
+            
+    SCCRQ:
+        instance:
+            - pcap_ccap_to_rpd_SCCRQ: $procedure_name$_ccap_to_rpd_SCCRQ.pcap
+            - xml_ccap_to_rpd_SCCRQ: $procedure_name$_ccap_to_rpd_SCCRQ.xml
+        input: $pcap_file$
+        match: 'ip.src == $ccap_core_ip$ && ip.dst == $rpd_ip$ && ip.ttl == $ip_ttl$ && ip.proto == $ip_proto$ && l2tp.sid == $l2tp_session_id$ && l2tp.ccid == $l2tp_ccid$ && frame.time_epoch >= $dhcp_ack_time$'
+
+    ccap_ccid:
+        instance:
+            - pcap_rpd_to_ccap_get_ccid: $procedure_name$_pcap_rpd_to_ccap_get_ccid.pcap
+            - xml_rpd_to_ccap_get_ccid: $procedure_name$_xml_rpd_to_ccap_get_ccid.xml
+        input: $pcap_file$
+        match: 'ip.src == $rpd_ip$ and ip.dst == $ccap_core_ip$ and ip.proto == $ip_proto$ and l2tp.avp.message_type == 2 and frame.time_epoch >= $dhcp_ack_time$'
+        assign: 
+            ccid_assigned_by_rpd: get_show("//field[@name='l2tp.avp.assigned_control_conn_id']")
+            
+    ICRQ:
+        instance:
+            - pcap_ccap_to_rpd_ICRQ: $procedure_name$_ccap_to_rpd_ICRQ.pcap
+            - xml_ccap_to_rpd_ICRQ: $procedure_name$_ccap_to_rpd_ICRQ.xml
+        input: $pcap_file$
+        match: 'l2tp.ccid == $ccid_assigned_by_rpd$ and l2tp.avp.type == 0 and l2tp.avp.message_type == 10 and frame.time_epoch >= $dhcp_ack_time$ and frame.number <= 5'
+        assign: 
+            last_ccap_to_rpd_ICRQ_time: get_max("//field[@name='frame.time_epoch']")    
+       
+    rpd_ccid:
+       instance:
+           - pcap_ccap_to_rpd_get_ccid: $procedure_name$_pcap_ccap_to_rpd_get_ccid.pcap
+           - xml_ccap_to_rpd_get_ccid: $procedure_name$_xml_ccap_to_rpd_get_ccid.xml
+       input: $pcap_file$
+       match: 'ip.src == $ccap_core_ip$ and ip.dst == $rpd_ip$ and ip.proto == $ip_proto$ and l2tp.avp.message_type == 1 and frame.time_epoch >= $dhcp_ack_time$'
+       assign: 
+           ccid_assigned_by_ccap: get_show("//field[@name='l2tp.avp.assigned_control_conn_id']")
+           
+    ICRP:
+       instance: 
+           - pcap_ICRP: $procedure_name$_pcap_ICRP.pcap
+           - xml_ICRP: $procedure_name$_xml_ICRP.xml
+       input: $pcap_file$
+       match: 'l2tp.ccid == $ccid_assigned_by_ccap$ and l2tp.avp.message_type == 11 and l2tp.avp.type == 0 and frame.time_epoch >= $dhcp_ack_time$ and frame.number <= 5'
+           
+testcase:
+
+    tlv_check:
+        input: check_TLV
+        checkpoint:
+            "{#26.6.1}{Verify AdminState of the SC-QAM channel}{check_tlv}{62.1}": ["length==1", "value==2"] 
+            "{#26.6.2}{Verify CcapCoreOwner of SC-QAM channel }{check_tlv}{62.2}": ["length==6", "'value'=='$ccap_mac_addr$'"] 
+            
+    CCAP_to_RPD_SCCRQ:
+        input: $xml_ccap_to_rpd_SCCRQ$
+        checkpoint:
+            "{#26.6.7.3}{Identify SCCRQ in the filtered packets}{identify_field}{//field[@show='1'][@name='l2tp.avp.message_type']...}":
+                "{#26.6.7.3.1}{Verify M, H, and Resv bits }{start_bits}": '0b100000'
+                "{#26.6.7.3.2}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 0}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [0]
+                "{#26.6.7.3.3}{Verify Attribute Type l2tp.avp.type == 0 indicating Message Type AVP}{compare_value}{field[@name='l2tp.avp.type']}": [0]
+                "{#26.6.7.3.4}{Verify Attribute Value is 1}{compare_value}{field[@name='l2tp.avp.message_type']}": [1]
+
+    CCAP_to_RPD_ICRQ:
+        input: $xml_ccap_to_rpd_ICRQ$
+        checkpoint:
+            "{#26.7.4}{ICRQ packets}{identify_field}{//field[@show='17'][@name='l2tp.avp.cablelabstype']...}":
+                "{#26.7.4.1}{Verify Attribute Type l2tp.avp.type==17 in ICRQ}{compare_value}{field[@name='l2tp.avp.cablelabstype']}": [17]
+                "{#26.7.4.2}{Verify length l2tp.avp.length = 8}{compare_value}{field[@name='l2tp.avp.length']}": [8]
+                "{#26.7.4.3}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [4491]
+                "{#26.7.4.4}{Verify DEPI L2-Specific Sublayer Subtype}{compare_value}{field[@name='l2tp.avp.layer2_spec_sublayer_subtype']}": [1]
+            "{#26.7.4.5}{Verify l2tp.avp.type==4}{identify_field}{//field[@show='4'][@name='l2tp.avp.cablelabstype']...}":
+                "{#26.7.4.5}{Verify l2tp.avp.type==4}{compare_value}{field[@name='l2tp.avp.cablelabstype']}": [4]
+                "{#26.7.4.6}{Verify DEPI local MTU Value}{compare_value}{field[@name='hf.l2tp.cablel.depi.local_mtu']}": [1500]
+                "{#26.7.4.7}{Verify M, H, and Resv bits}{start_bits}": '0b100000'
+                "{#26.6.7.8}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [4491]
+            
+    CCAP_to_RPD_ICRP:
+        input: $xml_ICRP$
+        checkpoint:
+            "{#26.7.5}{indicating ICRP packets}{identify_field}{//field[@show='17'][@name='l2tp.avp.cablelabstype']...}":
+                "{#26.7.5.1}{Verify Attribute Type l2tp.avp.type==17 in ICRP}{compare_value}{field[@name='l2tp.avp.cablelabstype']}": [17]
+                "{#26.7.5.2}{Verify length l2tp.avp.length = 8}{compare_value}{field[@name='l2tp.avp.length']}": [8]
+                "{#26.7.5.3}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [4491]
+                "{#26.7.5.4}{Verify DEPI L2-Specific Sublayer Subtype}{compare_value}{field[@name='l2tp.avp.layer2_spec_sublayer_subtype']}": [1]     
+            "{#26.7.5.5}{Verify l2tp.avp.type==7}{identify_field}{//field[@show='7'][@name='l2tp.avp.cablelabstype']...}":
+                "{#26.7.5.5}{Verify l2tp.avp.type==7}{compare_value}{field[@name='l2tp.avp.cablelabstype']}": [7]
+                "{#26.7.5.6}{Verify DEPI Remote MTU Value}{compare_value}{field[@name='hf.l2tp.cablel.depi.remote_mtu']}": [1500]
+                "{#26.7.5.7}{Verify M, H, and Resv bits}{start_bits}": '0b100000'
+                "{#26.7.5.8}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [4491]
+                "{#26.7.5.9}{Verify Length }{compare_value}{field[@name='l2tp.avp.length']}": [8]

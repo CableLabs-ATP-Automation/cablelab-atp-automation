@@ -1,0 +1,116 @@
+source:
+    procedure_name: "#23_L2TPv3_DSCP_Policy"
+    ip_proto: "0x73"
+    ip_ttl: "0xff"
+    l2tp_session_id: "0"
+    l2tp_ccid: "0"
+    other_dscp_value: "6"
+    
+   
+
+filter:
+   DHCP_ACK:
+        instance: 
+            - pcap_DHCP_ACK: $procedure_name$_pcap_DHCP_ACK.pcap
+            - xml_DHCP_ACK: $procedure_name$_xml_DHCP_ACK.xml
+        input: $pcap_file$
+        match: 'bootp.hw.mac_addr == $rpd_mac_addr$ and (udp.port == 67 or udp.port == 68) and bootp.option.dhcp == 5'
+        assign:
+            dhcp_ack_time: get_show("//field[@name='frame.time_epoch']")
+        
+   CCAP_to_RPD_DSCP_0:
+        instance: 
+            - pcap_CCAP_to_RPD_DSCP_0: $procedure_name$_pcap_CCAP_to_RPD_DSCP_0.pcap
+            - xml_CCAP_to_RPD_DSCP_0: $procedure_name$_xml_CCAP_to_RPD_DSCP_0.xml
+        input: $pcap_file$
+        match: 'ip.src == $ccap_core_ip$ && frame.time_epoch >= $dhcp_ack_time$ && ip.dst == $rpd_ip$ && ip.ttl == $ip_ttl$ && ip.proto == $ip_proto$ && l2tp.sid == $l2tp_session_id$ && l2tp.ccid == $l2tp_ccid$'
+
+   RPD_to_CCAP_DSCP_0: 
+        instance: 
+            - pcap_RPD_to_CCAP_DSCP_0: $procedure_name$_pcap_RPD_to_CCAP_DSCP_0.pcap
+            - xml_RPD_to_CCAP_DSCP_0: $procedure_name$_xml_RPD_to_CCAP_DSCP_0.xml
+        input: $pcap_file$
+        match: 'ip.src == $rpd_ip$ && frame.time_epoch >= $dhcp_ack_time$ && ip.dst == $ccap_core_ip$ && ip.proto == $ip_proto$ && l2tp.avp.message_type == 2'
+   
+   stopCCN:
+       instance:
+           - pcap_stopCCN: $procedure_name$_pcap_stopCCN.pcap
+           - xml_stopCCN: $procedure_name$_xml_stopCCN.xml
+       input: $pcap_file$
+       match: 'ip.src == $ccap_core_ip$ && frame.time_epoch >= $dhcp_ack_time$ && ip.dst == $rpd_ip$ and l2tp.avp.message_type == 4 and l2tp.avp.type == 0 and l2tp.sid == 0'
+       assign:
+            stop_ccn_time_epoch: get_max("//field[@name='frame.time_epoch']")
+            
+   CCAP_to_RPD_DSCP_other: 
+        instance:
+            - pcap_CCAP_to_RPD_DSCP_other: $procedure_name$_pcap_CCAP_to_RPD_DSCP_other.pcap
+            - xml_CCAP_to_RPD_DSCP_other: $procedure_name$_xml_CCAP_to_RPD_DSCP_other.xml
+        skip:
+            - $stopCCN$: False
+        input: $pcap_file$
+        match: 'ip.src == $ccap_core_ip$ && frame.time_epoch >= $stop_ccn_time_epoch$ && ip.dst == $rpd_ip$ && ip.ttl == $ip_ttl$ && ip.proto == $ip_proto$ && l2tp.sid == $l2tp_session_id$ && l2tp.ccid == $l2tp_ccid$'
+
+   RPD_to_CCAP_DSCP_other: 
+        instance: 
+            - pcap_RPD_to_CCAP_DSCP_other: $procedure_name$_pcap_RPD_to_CCAP_DSCP_other.pcap
+            - xml_RPD_to_CCAP_DSCP_other: $procedure_name$_xml_RPD_to_CCAP_DSCP_other.xml
+        skip:
+            - $stopCCN$: False
+        input: $pcap_file$
+        match: 'ip.src == $rpd_ip$ && frame.time_epoch >= $stop_ccn_time_epoch$ && ip.dst == $ccap_core_ip$ && ip.proto == $ip_proto$ && l2tp.avp.message_type == 2'
+            
+    
+  
+testcase:
+    CCAP_to_RPD:
+        input: $xml_CCAP_to_RPD_DSCP_0$
+        checkpoint:
+          "{#23.6.1}{Verify the DSCP value of the message ip.dsfield}{compare_value}{//field[@name='ip.dsfield']}": [0]
+          
+          "{#23.6.2}{Identify SCCRQ in the filtered packets}{identify_field}{//field[@show='1'][@name='l2tp.avp.message_type']...}": 
+              "{#23.6.2.1}{Verify M, H, and Resv bits}{start_bits}": "0b100000"
+              "{#23.6.2.3}{Verify Vendor ID for the AVP}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [0]
+              "{#23.6.2.3}{Verify Attribute Type l2tp.avp.type == 0 indicating Message Type AVP}{compare_value}{field[@name='l2tp.avp.type']}": [0]
+              "{#23.6.2.4}{Verify Attribute Value is 1}{compare_value}{field[@name='l2tp.avp.message_type']}": [1]
+          "{#23.6.2.5}{Verify that attribute type l2tp.avp.type==47 does not exist}{not_exist}{//field[@name='l2tp.avp.type']}": [47]
+          
+    RPD_to_CCAP:
+        input: $xml_RPD_to_CCAP_DSCP_0$
+        checkpoint:
+          
+          "{#23.9}{Identify SCCRP in the filtered packets }{identify_field}{//field[@show='2'][@name='l2tp.avp.message_type']...}": 
+              "{#23.9.1}{Verify M, H, and Resv bits}{start_bits}": "0b100000"
+              "{#23.9.2}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 0}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [0]
+              "{#23.9.3}{Verify Attribute Type l2tp.avp.type == 0 indicating Message Type}{compare_value}{field[@name='l2tp.avp.type']}": [0]
+              "{#23.9.4}{Verify Attribute Value is 2}{compare_value}{field[@name='l2tp.avp.message_type']}": [2]
+
+          "{#23.9.5}{Verify IPv4 dscp value is set to Best Effort, ip.dsfield==0}{compare_value}{//field[@name='ip.dsfield']}": [0]
+          "{#23.9.6}{Verify that attribute type l2tp.avp.type==47 does not exist}{not_exist}{//field[@name='l2tp.avp.type']}": [47]
+          
+    CCAP_to_RPD_other:
+        input: $xml_CCAP_to_RPD_DSCP_other$
+        skip: 
+            - $CCAP_to_RPD_DSCP_other$: False          
+        checkpoint:
+          "{#23.11.1}{Verify that attribute type l2tp.avp.type==47 exists}{exist}{//field[@name='l2tp.avp.type']}": [47]
+          "{#23.11.2}{Extract PHB-ID from l2tp.avp.control_connection_dscp}{compare_value}{//field[@name='ip.dsfield']}": [0]
+          "{#23.11.3}{store the dscp value}{store_value}{//field[@name='ip.dsfield']}": "$dscp$"
+          
+              
+    RPD_to_CCAP_other:
+        input: $xml_RPD_to_CCAP_DSCP_other$
+        skip: 
+            - $RPD_to_CCAP_DSCP_other$: False
+            - "$#23.11.1$": False
+        checkpoint:
+          "{#23.12.1}{If 23.11.1 is True, Verify IPv4 dscp value is set to ip.dsfield==PHB-ID value from Step 23.11.2}{exist}{//field[@name='l2tp.avp.type']}": [47]
+          
+    RPD_to_CCAP_other_1:
+        input: $xml_RPD_to_CCAP_DSCP_other$
+        skip: 
+            - $RPD_to_CCAP_DSCP_other$: False
+            - "$#23.11.1$": True
+        checkpoint:
+          "{#23.12.2}{If 23.11.1 is False, Verify IPv4 dscp value is set to Best Effort i.e. ip.dsfield==0}{compare_value}{//field[@name='ip.dsfield']}": [0]
+   
+                   

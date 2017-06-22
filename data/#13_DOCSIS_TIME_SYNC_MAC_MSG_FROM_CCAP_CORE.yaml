@@ -1,0 +1,25 @@
+source:
+    procedure_name: "#13_DOCSIS_TIME_SYNC_MAC_MSG_FROM_CCAP_CORE"
+    ip_proto: "0x73"
+    ip_ttl: "0xff"
+    l2tp_session_id: "0"
+    l2tp_ccid: "0"
+
+filter:
+    PSP_header:
+        instance:
+            - PSP_header: $procedure_name$_PSP_header.pcap
+            - xml_PSP_header: $procedure_name$_PSP_header.xml
+        input: $pcap_file$
+        match: 'psp.l2_spec_v == 0 && psp.l2_spec_s == 1 &&  psp.l2_spec_h == 0x0 && frame.number <= 1'
+
+        
+testcase:
+    PSP_header:
+        input: $xml_PSP_header$
+        checkpoint:
+            "{#13.18}{Number of entries in the PSP Segment Table}{identify_field}{.//field[@show='0'][@name='psp.l2_spec_v']...}":
+                "{#13.18}{Store segment count }{store_value}{field[@name='psp.l2_spec_seg_count']}": "$segment_count$"
+                "{#13.18}{Number of entries in the PSP Segment Table}{get_number_field}{field[@name='psp.psp_begin_bit']}": "$segment_count$"
+                "{#13.19}{Search for (00C0)16}{value_not_include}{field[@name='psp.cisco.psp.segment.data']}": "00C0"
+# 

@@ -1,0 +1,74 @@
+source:
+    procedure_name: "#21_L2TPv3_Control_messages"
+    ip_proto: "0x73"
+    ip_ttl: "0xff"
+    l2tp_session_id: "0"
+    l2tp_ccid: "0"
+
+filter:
+   DHCP_ACK:
+        instance: 
+            - pcap_DHCP_ACK: $procedure_name$_pcap_DHCP_ACK.pcap
+            - xml_DHCP_ACK: $procedure_name$_xml_DHCP_ACK.xml
+        input: $pcap_file$
+        match: 'bootp.hw.mac_addr == $rpd_mac_addr$ and (udp.port == 67 or udp.port == 68) and bootp.option.dhcp == 5'
+        assign:
+            dhcp_ack_time: get_show("//field[@name='frame.time_epoch']")
+            
+   CCAP_to_RPD:
+        instance: 
+            - pcap_CCAP_to_RPD: $procedure_name$_pcap_CCAP_to_RPD.pcap
+            - xml_CCAP_to_RPD: $procedure_name$_xml_CCAP_to_RPD.xml
+        input: $pcap_file$
+        match: 'ip.src == $ccap_core_ip$ && frame.time_epoch >= $dhcp_ack_time$ && ip.dst == $rpd_ip$ && ip.ttl == $ip_ttl$ && ip.proto == $ip_proto$ && l2tp.sid == $l2tp_session_id$ && l2tp.ccid == $l2tp_ccid$'
+
+   RPD_to_CCAP:
+        instance: 
+            - pcap_RPD_to_CCAP: $procedure_name$_pcap_RPD_to_CCAP.pcap
+            - xml_RPD_to_CCAP: $procedure_name$_xml_RPD_to_CCAP.xml
+        input: $pcap_file$
+        match: 'ip.src == $rpd_ip$ && frame.time_epoch >= $dhcp_ack_time$ && ip.dst == $ccap_core_ip$ && ip.proto == $ip_proto$ && l2tp.avp.message_type == 2'
+   
+  
+testcase:
+    CCAP_to_RPD:
+        input: $xml_CCAP_to_RPD$
+        checkpoint:
+          "{#21.5}{Filter out the packets for the l2tp Session ID =0 for control packets }{identify_field}{//field[@show='1'][@name='l2tp.type']...}": 
+              "{#21.5.1}{Verify T bit for control packets using lt2p.l2_spec_t}{compare_value}{field[@name='l2tp.type']}": [1]
+              "{#21.5.2}{Verify the length bit for control packets using l2tp.length_bit}{compare_value}{field[@name='l2tp.length_bit']}": [1]
+              "{#21.5.3}{Verify the Sequence bit using l2tp.seq_bit}{compare_value}{field[@name='l2tp.seq_bit']}": [1]
+              "{#21.5.4}{Verify that the first 12 bits of the L2TPv3 Control Header}{start_bits}": "0b110010000000"
+              
+          "{#21.6}{Identify SCCRQ in the filtered packets }{identify_field}{//field[@show='1'][@name='l2tp.avp.message_type']...}": 
+              "{#21.6.1}{Verify M, H, and Resv bits }{start_bits}": "0b100000"
+              "{#21.6.2}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 0/4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [0,4491]
+              "{#21.6.3}{Verify Attribute Type l2tp.avp.type == 0 indicating Message Type}{compare_value}{field[@name='l2tp.avp.type']}": [0]
+              "{#21.6.4}{Verify Attribute Value is 1}{compare_value}{field[@name='l2tp.avp.message_type']}": [1]
+              
+          "{#21.6.5}{Extract Attribute Type l2tp.avp.type == 61 indicating Assigned Control Connection ID}{identify_field}{//field[@show='61'][@name='l2tp.avp.type']...}": 
+              "{#21.6.5}{capture l2tp.avp.assigned_control_conn_id}{store_value}{field[@name='l2tp.avp.assigned_control_conn_id']}": "$accid$"
+              
+          "{#21.6.6}{Verify DEPI Multicast Capability AVP. Extract Attribute Type l2tp.avp.type == 13 indicating DEPI Multicast Capability AVP}{identify_field}{//field[@show='13'][@name='l2tp.avp.cablelabstype']...}": 
+              "{#21.6.6.1}{Verify M, H, and Resv bits}{start_bits}": "0b100000"
+              "{#21.6.6.2}{Verify Vendor ID for the AVP,l2tp.avp.vendor_id == 4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [4491]
+              "{#21.6.6.3}{Verify Length }{compare_value}{field[@name='l2tp.avp.length']}": [8]
+              "{#21.6.6.4}{Verify C bit}{start_bits}{field[@name='l2tp.cablel.depi.pseudow.subtype_cap_list']}": "0b1"
+              
+    RPD_to_CCAP:
+        input: $xml_RPD_to_CCAP$
+        checkpoint:
+          "{#21.9_}{verify control connection ID l2tp.ccid = Assigned Control Connection ID from SCCRQ}{compare_value}{//field[@name='l2tp.ccid']}": "$accid$"
+          "{#21.9}{Identify SCCRP in the filtered packets }{identify_field}{//field[@show='2'][@name='l2tp.avp.message_type']...}": 
+              "{#21.9.1}{Verify M, H, and Resv bits }{start_bits}": "0b100000"
+              "{#21.9.2}{Verify Vendor ID for the AVP,l2tp.avp.vendor_id == 0/4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [0,4491]
+              "{#21.9.3}{Verify Attribute Type l2tp.avp.type == 0 indicating Message Type}{compare_value}{field[@name='l2tp.avp.type']}": [0]
+              "{#21.9.4}{Verify Attribute Value is 2}{compare_value}{field[@name='l2tp.avp.message_type']}": [2]
+
+          "{#21.9.5}{Verify DEPI Multicast Capability AVP. Extract Attribute Type l2tp.avp.type == 13 indicating DEPI Multicast Capability AVP}{identify_field}{//field[@show='13'][@name='l2tp.avp.cablelabstype']...}": 
+              "{#21.9.5.1}{Verify M, H, and Resv bits}{start_bits}": "0b100000"
+              "{#21.9.5.2}{Verify Vendor ID for the AVP,l2tp.avp.vendor_id == 4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [4491]
+              "{#21.9.5.3}{Verify Length }{compare_value}{field[@name='l2tp.avp.length']}": [8]
+              "{#21.9.9.4}{Verify C bit}{start_bits}{field[@name='l2tp.cablel.depi.pseudow.subtype_cap_list']}": "0b1"
+     
+                   

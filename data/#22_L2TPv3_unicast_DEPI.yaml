@@ -1,0 +1,199 @@
+source:
+    procedure_name: "#22_L2TPv3_unicast_DEPI"
+    ip_proto: "0x73"
+    l2tp_session_id: "0"
+
+filter:
+   DHCP_ACK:
+        instance: 
+            - pcap_DHCP_ACK: $procedure_name$_pcap_DHCP_ACK.pcap
+            - xml_DHCP_ACK: $procedure_name$_xml_DHCP_ACK.xml
+        input: $pcap_file$
+        match: 'bootp.hw.mac_addr == $rpd_mac_addr$ and (udp.port == 67 or udp.port == 68) and bootp.option.dhcp == 5'
+        assign:
+            dhcp_ack_time: get_show("//field[@name='frame.time_epoch']")
+
+   ICRP_ICRQ:
+        instance: 
+            - pcap_ICRP_ICRQ: $procedure_name$_pcap_ICRP_ICRQ.pcap
+            - xml_ICRP_ICRQ: $procedure_name$_xml_ICRP_ICRQ.xml
+        input: $pcap_file$
+        match: 'l2tp.avp.type == 0 and ip.proto == $ip_proto$ and frame.time_epoch >= $dhcp_ack_time$ and l2tp.sid == $l2tp_session_id$ and (l2tp.avp.message_type == 10 or l2tp.avp.message_type == 11)'
+
+   rpd_to_ccap_get_ccid:
+       instance: 
+           - pcap_rpd_to_ccap_get_ccid: $procedure_name$_pcap_rpd_to_ccap_get_ccid.pcap
+           - xml_rpd_to_ccap_get_ccid: $procedure_name$_xml_rpd_to_ccap_get_ccid.xml
+       input: $pcap_file$
+       match: 'ip.src == $rpd_ip$ and ip.dst == $ccap_core_ip$ and frame.time_epoch >= $dhcp_ack_time$ and ip.proto == $ip_proto$ and l2tp.avp.message_type == 2'
+       assign: 
+           ccid_assigned_by_rpd: get_show("//field[@name='l2tp.avp.assigned_control_conn_id']")
+
+   ccap_to_rpd_get_ccid:
+       instance: 
+           - pcap_ccap_to_rpd_get_ccid: $procedure_name$_pcap_ccap_to_rpd_get_ccid.pcap
+           - xml_ccap_to_rpd_get_ccid: $procedure_name$_xml_ccap_to_rpd_get_ccid.xml
+       input: $pcap_file$
+       match: 'ip.src == $ccap_core_ip$ and ip.dst == $rpd_ip$ and frame.time_epoch >= $dhcp_ack_time$ and ip.proto == $ip_proto$ and l2tp.avp.message_type == 1'
+       assign: 
+           ccid_assigned_by_ccap: get_show("//field[@name='l2tp.avp.assigned_control_conn_id']")
+
+   ICRP:
+       instance: 
+           - pcap_ICRP: $procedure_name$_pcap_ICRP.pcap
+           - xml_ICRP: $procedure_name$_xml_ICRP.xml
+       input: $pcap_ICRP_ICRQ$
+       match: 'l2tp.ccid == $ccid_assigned_by_ccap$ and frame.time_epoch >= $dhcp_ack_time$ and l2tp.avp.message_type == 11 and l2tp.avp.cablelabstype == 3'
+       assign:
+           last_icrp_time: get_max("//field[@name='frame.time_epoch']")
+
+   last_ICRP:
+       instance: 
+           - pcap_last_ICRP: $procedure_name$_pcap_last_ICRP.pcap
+           - xml_last_ICRP: $procedure_name$_xml_last_ICRP.xml
+       input: $pcap_ICRP$
+       match: 'frame.time_epoch == $last_icrp_time$ and frame.time_epoch >= $dhcp_ack_time$'
+       assign:
+           icrp_rsid: get_show("//field[@name='l2tp.avp.remote_session_id']")
+
+   paired_ICRQ:
+       instance:
+           - pcap_paired_ICRQ: $procedure_name$_pcap_paired_ICRQ.pcap
+           - xml_paired_ICRQ: $procedure_name$_xml_paired_ICRQ.xml
+       input: $pcap_ICRP_ICRQ$
+       match: 'l2tp.ccid == $ccid_assigned_by_rpd$ and frame.time_epoch >= $dhcp_ack_time$ and l2tp.avp.message_type == 10 and l2tp.avp.cablelabstype == 2 and l2tp.avp.local_session_id == $icrp_rsid$'
+
+   ICRQ:
+       instance: 
+           - pcap_ICRQ: $procedure_name$_pcap_ICRQ.pcap
+           - xml_ICRQ: $procedure_name$_xml_ICRQ.xml
+       input: $pcap_ICRP_ICRQ$
+       match: 'l2tp.ccid == $ccid_assigned_by_rpd$ and l2tp.avp.message_type == 10 and frame.time_epoch >= $dhcp_ack_time$ and frame.number <= 1'
+
+   ccap_to_rpd_SLI:
+       instance:
+           - pcap_ccap_to_rpd_SLI: $procedure_name$_pcap_ccap_to_rpd_SLI.pcap
+           - xml_ccap_to_rpd_SLI: $procedure_name$_xml_ccap_to_rpd_SLI.xml
+       input: $pcap_file$
+       match: 'ip.src == $ccap_core_ip$ and ip.dst == $rpd_ip$ and frame.time_epoch >= $dhcp_ack_time$ and frame.time_epoch >= $dhcp_ack_time$ and l2tp.ccid == $ccid_assigned_by_rpd$ and l2tp.avp.type == 0 and l2tp.avp.message_type == 16'
+       assign:
+           last_ccap_to_rpd_SLI_time: get_max("//field[@name='frame.time_epoch']")  
+
+   ccap_to_rpd_last_SLI:
+       instance: 
+           - pcap_ccap_to_rpd_last_SLI: $procedure_name$_ccap_to_rpd_last_SLI.pcap
+           - xml_ccap_to_rpd_last_SLI: $procedure_name$_xml_ccap_to_rpd_last_SLI.xml
+       input: $pcap_ccap_to_rpd_SLI$
+       match: 'frame.time_epoch == $last_ccap_to_rpd_SLI_time$'          
+
+   rpd_to_ccap_SLI:
+       instance:
+           - pcap_rpd_to_ccap_SLI: $procedure_name$_pcap_rpd_to_ccap_SLI.pcap
+           - xml_rpd_to_ccap_SLI: $procedure_name$_xml_rpd_to_ccap_SLI.xml
+       input: $pcap_file$
+       match: 'ip.src == $rpd_ip$ and ip.dst == $ccap_core_ip$ and frame.time_epoch >= $dhcp_ack_time$ and l2tp.ccid == $ccid_assigned_by_ccap$ and l2tp.avp.type == 0 and l2tp.avp.message_type == 16'
+       assign:
+           last_rpd_to_ccap_SLI_time: get_max("//field[@name='frame.time_epoch']") 
+
+   rpd_to_ccap_last_SLI:
+       instance: 
+           - pcap_rpd_to_ccap_last_SLI: $procedure_name$_rpd_to_ccap_last_SLI.pcap
+           - xml_rpd_to_ccap_last_SLI: $procedure_name$_xml_rpd_to_ccap_last_SLI.xml
+       input: $pcap_rpd_to_ccap_SLI$
+       match: 'frame.time_epoch == $last_rpd_to_ccap_SLI_time$'                           
+
+   pcap_stopCCN:
+       instance: 
+           - pcap_stopCCN: $procedure_name$_pcap_stopCCN.pcap
+           - xml_stopCCN: $procedure_name$_xml_stopCCN.xml
+       input: $pcap_file$
+       match: 'ip.src == $ccap_core_ip$ and ip.dst == $rpd_ip$ and frame.time_epoch >= $dhcp_ack_time$ and l2tp.avp.message_type == 4 and l2tp.avp.type == 0 and l2tp.sid == 0'
+
+testcase:
+    CCAP_to_RPD_ICRQ:
+        input: $xml_paired_ICRQ$
+        checkpoint:
+            "{#22.5}{Indicating ICRQ packets.}{identify_field}{//field[@show='63'][@name='l2tp.avp.type']...}":
+                
+                "{#22.5.1}{Verify l2tp.avp.type==63 in ICRQ}{compare_value}{field[@name='l2tp.avp.type']}": [63]
+                "{#22.5.2}{Verify l2tp.avp.local_session_id is not in range from 0x80000001 to 0x8000FFFF in ICRQ}{out_range}{field[@name='l2tp.avp.local_session_id']}": [2147483649, 2147549184]
+
+            "{#22.5.3}{Verify l2tp.avp.type==64 in ICRQ}{identify_field}{//field[@show='64'][@name='l2tp.avp.type']...}":
+                "{#22.5.4}{Verify l2tp.avp.remote_session_id is not in range from 0x80000001 to 0x8000FFFF in ICRQ}{out_range}{field[@name='l2tp.avp.remote_session_id']}": [2147483649, 2147549184]
+
+            "{#22.5.4}{Verify Existence of following AVPs in the ICRQ message}{identify_field}{//field[@show='0'][@name='l2tp.avp.type']...}": 
+                "{#22.5.4.2}{Verify M, H, and Resv bits}{start_bits}": '0b100000'
+                "{#22.5.4.3}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}" : [4491]   
+
+            "{#22.5.4.4}{identify l2tp.avp.type==2}{identify_field}{//field[@show='2'][@name='l2tp.avp.cablelabstype']...}": 
+                "{#22.5.4.5}{Verify M, H, and Resv bits}{start_bits}": '0b100000'
+                "{#22.5.4.6}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [4491]          
+                "{#22.5.4.7}{Verify Length l2tp.avp.length }{store_value}{field[@name='l2tp.avp.length']}": "$l2tp_avp_length$"   
+                "{#22.5.4.7_1}{compute number of Flows}{calculate_value}{($l2tp_avp_length$ - 6)/2}": "$N$"
+
+            "{#22.5.4.8}{Identify l2tp.avp.type==4}{identify_field}{//field[@show='4'][@name='l2tp.avp.cablelabstype']...}":
+                "{#22.5.4.9}{Verify DEPI local MTU Value}{compare_value}{field[@name='hf.l2tp.cablel.depi.local_mtu']}": [1500]
+        
+    CCAP_to_RPD_All_ICRQ:
+        input: $xml_ICRQ$
+        checkpoint:
+            "{#22.5.5.2}{identify l2tp.avp.type==14}{identify_field}{//field[@show='14'][@name='l2tp.avp.cablelabstype']...}":
+                "{#22.5.5}{Verify M, H, and Resv bits}{start_bits}": '0b100000'
+                "{#22.5.5.1}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [4491]                
+
+    RPD_to_CCAP_ICRP:
+        input: $xml_last_ICRP$
+        checkpoint:
+            "{#22.6}{indicating ICRP packets}{identify_field}{//field[@show='63'][@name='l2tp.avp.type']...}":
+                "{#22.6.1}{Verify l2tp.avp.type==63 in ICRP}{compare_value}{field[@name='l2tp.avp.type']}": [63]
+                "{#22.6.2}{Verify l2tp.avp.local_session_id is not in range from 0x80000001 to 0x8000FFFF in ICRP}{out_range}{field[@name='l2tp.avp.local_session_id']}": [2147483649, 2147549184]
+
+            "{#22.6.3}{Verify l2tp.avp.type==64 in ICR}{identify_field}{//field[@show='64'][@name='l2tp.avp.type']...}":
+                "{#22.6.4}{Verify l2tp.avp.remote_session_id is not in range from 0x80000001 to 0x8000FFFF in ICRP}{out_range}{field[@name='l2tp.avp.remote_session_id']}": [2147483649, 2147549184]   
+
+            "{#22.6.4.4}{Verify l2tp.avp.type==3}{identify_field}{//field[@show='3'][@name='l2tp.avp.cablelabstype']...}": 
+                "{#22.6.4.2}{Verify M, H, and Resv bits}{start_bits}": '0b100000'
+                "{#22.6.4.3}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [4491]
+
+            "{#22.6.4.6.3}{Verify l2tp.avp.type==7}{identify_field}{//field[@show='7'][@name='l2tp.avp.cablelabstype']...}":
+                "{#22.6.4.6}{Verify M, H, and Resv bits}{start_bits}": '0b100000'
+                "{#22.6.4.6.1}{Verify Vendor ID for the AVP, l2tp.avp.vendor_id == 4491}{compare_value}{field[@name='l2tp.avp.vendor_id']}": [4491]  
+                "{#22.6.4.6.2}{Verify Length }{compare_value}{field[@name='l2tp.avp.length']}": [8]
+                "{#22.6.4.6.4}{Verify DEPI Remote MTU Value}{compare_value}{field[@name='hf.l2tp.cablel.depi.remote_mtu']}": [1500]  
+
+    CCAP_to_RPD_SLI:
+        input: $xml_ccap_to_rpd_last_SLI$
+        checkpoint:
+            "{#22.8.1}{Verify l2tp.ccid equal to the control connection ID assigned by RPD, l2tp.avp.type==0, and l2tp.avp.message_type == 16}{identify_field}{//field[@show='63'][@name='l2tp.avp.type']...}":
+                "{#22.8.2}{Verify l2tp.avp.type==63 in SLI}{compare_value}{field[@name='l2tp.avp.type']}": [63]
+                "{#22.8.3}{Verify l2tp.avp.local_session_id is not in range from 0x80000001 to 0x8000FFFF in SLI}{out_range}{field[@name='l2tp.avp.local_session_id']}": [2147483649, 2147549184]
+
+    RPD_to_CCAP_SLI:
+        input: $xml_rpd_to_ccap_last_SLI$
+        checkpoint:
+            "{#22.8.4}{Verify l2tp.ccid equal to the control connection ID assigned by CCAP Core, l2tp.avp.type==0, and l2tp.avp.message_type == 16}{identify_field}{//field[@show='63'][@name='l2tp.avp.type']...}":
+                "{#22.8.5}{Verify l2tp.avp.type==63 in SLI}{compare_value}{field[@name='l2tp.avp.type']}": [63]
+                "{#22.8.6}{Verify l2tp.avp.local_session_id is not in range from 0x80000001 to 0x8000FFFF in SLI}{out_range}{field[@name='l2tp.avp.local_session_id']}": [2147483649, 2147549184]      
+
+    CCAP_to_RPD_StopCCN:
+        input: $xml_stopCCN$
+        skip: 
+          - $pcap_stopCCN$: False
+        checkpoint:
+            "{#22.9.1}{Verify there are no ICRQ message (l2tp.avp.message_type==10) with the above control connection ID (l2tp.ccid) indicating DEPI Session is take down}{not_exist}{//field[@name='l2tp.avp.message_type']}": [10]                  
+
+    # CCAP_to_RPD_CDN:
+    #     input: $pcap_CCAP_to_RPD_CDN$
+    #     checkpoint:
+    #         "{#22.8.7.3}{identify_field}{//field[@show='0'][@name='l2tp.avp.type']...}":
+    #             "{#22.8.7.1}{start_bits}": '0b100000'
+    #             "{#22.8.7.2}{compare_value}{//field[@name='l2tp.avp.vendor_id']}" : [0, 4491]
+    #             "{#22.8.7.4}{compare_value}{field[@name='l2tp.avp.message_type'}": [14]               
+
+    # RPD_to_CCAP_CDN:
+    #     input: $pcap_RPD_to_CCAP_CDN$
+    #     checkpoint:
+    #         "{#22.8.8.3}{identify_field}{//field[@show='0'][@name='l2tp.avp.type']...}":
+    #             "{#22.8.8.1}{start_bits}": '0b100000'
+    #             "{#22.8.8.2}{compare_value}{//field[@name='l2tp.avp.vendor_id']}" : [0, 4491]
+    #             "{#22.8.8.4}{compare_value}{field[@name='l2tp.avp.message_type'}": [14]  
